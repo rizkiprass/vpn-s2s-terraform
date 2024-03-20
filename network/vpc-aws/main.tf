@@ -1,11 +1,12 @@
 provider "aws" {
   region     = var.aws_region
-  access_key = var.access_key
-  secret_key = var.secret_key
+    profile                  = "acloudguru"
+#  access_key = var.access_key
+#  secret_key = var.secret_key
 }
 
 module "vpc" {
-  source  = "terraform-aws-modules/vpc/aws"
+  source  = "terraform-aws-modules/vpc/aws" //test1
   version = "5.1.1"
   # insert the 14 required variables here
   name                             = format("%s-%s-VPC", var.project, var.environment)
@@ -31,6 +32,13 @@ module "vpc" {
 
   #Virtual Private Gateway
   enable_vpn_gateway = true
+
+#  customer_gateways = {
+#    IP1 = {
+#      bgp_asn    = 65220
+#      ip_address = "172.83.124.10"
+#    }
+#  }
 
 
   tags = local.common_tags
@@ -154,66 +162,6 @@ resource "aws_eip" "eip-nat" {
 #  route_table_id = aws_route_table.app-rt.id
 #}
 
-module "vpn_gateway" {
-  source  = "terraform-aws-modules/vpn-gateway/aws"
-  version = "~> 3.0"
 
-  vpc_id                  = module.vpc.vpc_id
-  vpn_gateway_id          = module.vpc.vgw_id
-  customer_gateway_id     = "cgw-056fa9192f137b85c"
 
-  vpn_connection_static_routes_only = true
-  vpn_connection_static_routes_destinations = [] #fill dest routes
 
-  # precalculated length of module variable vpc_subnet_route_table_ids
-  vpc_subnet_route_table_count = 3
-  vpc_subnet_route_table_ids   = module.vpc.private_route_table_ids
-
-  # tunnel inside cidr & preshared keys (optional)
-#  tunnel1_inside_cidr   = var.custom_tunnel1_inside_cidr
-#  tunnel2_inside_cidr   = var.custom_tunnel2_inside_cidr
-#  tunnel1_preshared_key = var.custom_tunnel1_preshared_key
-#  tunnel2_preshared_key = var.custom_tunnel2_preshared_key
-}
-
-locals {
-  web_name = format("%s-%s-server-aws1", var.project, var.environment)
-}
-
-//Server Private web
-resource "aws_instance" "openswan" {
-  ami                         = "ami-0fa1ca9559f1892ec"
-  instance_type               = "t3.medium"
-  associate_public_ip_address = "true"
-  key_name                    = "testing-key"
-  subnet_id                   = module.vpc.public_subnets[0]
-  iam_instance_profile        = aws_iam_instance_profile.ssm-profile.name
-  user_data                   = file("openswan.sh")
-  source_dest_check           = false
-
-  metadata_options {
-    http_endpoint = "enabled"
-    http_tokens   = "required"
-  }
-  vpc_security_group_ids = [aws_security_group.web-app-sg.id]
-  root_block_device {
-    volume_size           = 10
-    volume_type           = "gp3"
-    iops                  = 3000
-    encrypted             = true
-    delete_on_termination = true
-    tags = merge(local.common_tags, {
-      Name = format("%s-ebs", local.web_name)
-    })
-  }
-
-  lifecycle {
-
-  }
-
-  tags = merge(local.common_tags, {
-    Name   = local.web_name,
-    OS     = "Centos",
-    Backup = "DailyBackup" # TODO: Set Backup Rules
-  })
-}
